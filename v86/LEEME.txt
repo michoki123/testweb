@@ -1,0 +1,2 @@
+Emulador x86 v86 (https://github.com/copy/v86), licencia BSD-2-Clause (ver LICENSE-v86.txt).
+BIOS: SeaBIOS y VGABIOS (licencia LGPL), tomados del repositorio de v86.
