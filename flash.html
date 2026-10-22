@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Juegos Flash</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  #stage{aspect-ratio:4/3;width:100%;max-height:75vh;background:#000;border-radius:var(--radius);overflow:hidden;
+    display:grid;place-items:center;color:#888;margin-bottom:14px}
+  #stage ruffle-player{width:100%;height:100%}
+  .games{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .games button{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:8px 16px}
+  .games button:hover,.games button.on{border-color:var(--accent)}
+  label.btn{cursor:pointer}
+  code{background:var(--surface2);padding:1px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="top"><a class="home" href="index.html" title="Inicio">🏠</a><h1>Juegos Flash</h1></div>
+<main>
+  <div id="stage"><span id="hint">Elegí un juego</span></div>
+  <div class="games" id="games"></div>
+
+  <label class="btn ghost">Abrir un .swf de mi equipo
+    <input type="file" id="file" accept=".swf" hidden>
+  </label>
+
+  <p class="muted" style="margin-top:20px">Para agregar juegos: poné el <code>.swf</code> en la carpeta <code>flash/</code> y sumalo a la lista <code>JUEGOS</code> en el código de esta página.</p>
+</main>
+
+<script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+<script>
+/* EDITÁ ESTA LISTA */
+const JUEGOS = [
+  // { nombre: "Mi juego", archivo: "flash/mi-juego.swf" },
+];
+
+const stage = document.getElementById('stage');
+let player = null;
+
+function load(url, btn) {
+  const ruffle = window.RufflePlayer && window.RufflePlayer.newest();
+  if (!ruffle) { stage.textContent = 'No cargó Ruffle (¿sin internet?).'; return; }
+  stage.innerHTML = '';
+  player = ruffle.createPlayer();
+  stage.appendChild(player);
+  player.load(url);
+  document.querySelectorAll('.games button').forEach(b => b.classList.toggle('on', b === btn));
+}
+
+const box = document.getElementById('games');
+if (!JUEGOS.length) {
+  const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Todavía no agregaste juegos a la lista.';
+  box.appendChild(p);
+}
+for (const j of JUEGOS) {
+  const b = document.createElement('button'); b.textContent = j.nombre;
+  b.onclick = () => load(j.archivo, b);
+  box.appendChild(b);
+}
+document.getElementById('file').onchange = e => {
+  const f = e.target.files[0]; if (f) load(URL.createObjectURL(f), null);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi sitio</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .hero{max-width:1000px;margin:0 auto;padding:calc(40px + env(safe-area-inset-top,0px)) 16px 20px}
+  .hero h1{font-size:clamp(30px,6vw,46px);margin:0 0 6px;letter-spacing:-.02em}
+  .hero p{margin:0;color:var(--muted);font-size:17px}
+</style>
+</head>
+<body>
+<div class="hero">
+  <h1>Mi sitio</h1>
+  <p>Mis cositas: juegos, música, programas y más.</p>
+</div>
+<main>
+  <div class="grid">
+    <a class="card" href="musica.html">
+      <span class="ico">🎵</span><h3>Música</h3>
+      <p>Pegá un link o buscá y escuchá.</p>
+    </a>
+    <a class="card" href="flash.html">
+      <span class="ico">🕹️</span><h3>Juegos Flash</h3>
+      <p>Archivos .swf corriendo con Ruffle.</p>
+    </a>
+    <a class="card" href="descargas.html">
+      <span class="ico">📦</span><h3>Descargas</h3>
+      <p>Mis programas y herramientas.</p>
+    </a>
+    <a class="card" href="buscador.html">
+      <span class="ico">🔍</span><h3>Buscador</h3>
+      <p>Buscador de imágenes por tags (necesita credenciales).</p>
+    </a>
+    <div class="card off">
+      <span class="ico">🎮</span><h3>Juegos WebAssembly</h3>
+      <p>Ports de juegos a la web.</p>
+      <span class="tag">Próximamente</span>
+    </div>
+  </div>
+</main>
+</body>
+</html>

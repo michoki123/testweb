@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Música</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .row{display:flex;gap:8px;margin-bottom:12px}
+  #ytwrap{aspect-ratio:16/9;width:100%;border-radius:var(--radius);overflow:hidden;background:#000;display:none;margin-bottom:12px}
+  #ytwrap.show{display:block}
+  #audio{width:100%;display:none;margin-bottom:12px}
+  #audio.show{display:block}
+  #now{margin:0 0 12px;font-weight:600;min-height:24px}
+  #msg{min-height:22px;margin-bottom:8px;color:var(--muted)}
+  #msg.err{color:var(--danger)}
+  .res{display:flex;gap:12px;align-items:center;padding:8px;border-radius:12px;cursor:pointer;border:1px solid transparent}
+  .res:hover{background:var(--surface)}
+  .res.on{background:var(--surface);border-color:var(--accent)}
+  .res img{width:96px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;flex:none;background:var(--surface2)}
+  .res b{display:block;font-weight:600;line-height:1.3}
+  .res span{color:var(--muted);font-size:13px}
+  details{margin-top:18px}
+  summary{cursor:pointer;color:var(--muted)}
+  .ctrl{display:flex;gap:8px;margin-bottom:12px}
+  .ctrl button{flex:1}
+</style>
+</head>
+<body>
+<div class="top"><a class="home" href="index.html" title="Inicio">🏠</a><h1>Música</h1></div>
+<main>
+  <form class="row" id="form">
+    <input class="field" id="q" placeholder="Pegá un link (YouTube o mp3) o escribí para buscar…" autocomplete="off" enterkeyhint="go">
+    <button class="btn">Ir</button>
+  </form>
+  <div id="msg"></div>
+
+  <div id="ytwrap"><div id="yt"></div></div>
+  <audio id="audio" controls></audio>
+  <p id="now"></p>
+  <div class="ctrl" id="ctrl" hidden>
+    <button class="btn ghost" id="prev">⏮ Anterior</button>
+    <button class="btn ghost" id="next">Siguiente ⏭</button>
+  </div>
+
+  <div id="results"></div>
+
+  <details id="cfg">
+    <summary>Ajustes de búsqueda</summary>
+    <div class="panel" style="margin-top:10px">
+      <p class="muted" style="margin-top:0">Para buscar por nombre hace falta una API key gratis de YouTube Data API v3. Se guarda solo en este navegador. Pegar links funciona sin key.</p>
+      <input class="field" id="key" placeholder="API key de YouTube" type="password" autocomplete="off">
+    </div>
+  </details>
+</main>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+const $ = id => document.getElementById(id);
+let yt = null, ytReady = false, pending = null;
+let queue = [], qi = -1;
+
+try { $('key').value = localStorage.getItem('ytkey') || ''; } catch(e) {}
+$('key').onchange = () => { try { localStorage.setItem('ytkey', $('key').value.trim()); } catch(e) {} };
+
+window.onYouTubeIframeAPIReady = () => {
+  yt = new YT.Player('yt', {
+    width: '100%', height: '100%',
+    playerVars: { playsinline: 1 },
+    events: {
+      onReady: () => { ytReady = true; if (pending) { pending(); pending = null; } },
+      onStateChange: e => { if (e.data === YT.PlayerState.ENDED) step(1); },
+      onError: () => setMsg('No se pudo reproducir ese video (puede estar bloqueado para embeber). Si abriste el archivo directo desde el disco, probá desde un servidor local.', true)
+    }
+  });
+};
+
+function setMsg(t, err) { $('msg').textContent = t; $('msg').className = err ? 'err' : ''; }
+
+function showMode(m) {
+  $('ytwrap').classList.toggle('show', m === 'yt');
+  $('audio').classList.toggle('show', m === 'audio');
+  if (m !== 'audio') $('audio').pause();
+  if (m !== 'yt' && ytReady) yt.stopVideo();
+}
+
+function whenReady(fn) { if (ytReady) fn(); else pending = fn; }
+
+function playYT(id, title) {
+  showMode('yt');
+  $('now').textContent = title || '';
+  whenReady(() => yt.loadVideoById(id));
+}
+function playList(list) {
+  showMode('yt');
+  $('now').textContent = 'Lista de reproducción';
+  whenReady(() => yt.loadPlaylist({ list, listType: 'playlist' }));
+}
+function playAudio(url) {
+  showMode('audio');
+  $('now').textContent = url.split('/').pop().split('?')[0];
+  $('audio').src = url; $('audio').play().catch(() => {});
+}
+
+function parse(input) {
+  let u; try { u = new URL(input); } catch(e) { return null; }
+  const h = u.hostname.replace(/^www\./, '');
+  if (h === 'youtu.be') return { id: u.pathname.slice(1) };
+  if (/(^|\.)youtube\.com$/.test(h)) {
+    const list = u.searchParams.get('list');
+    const v = u.searchParams.get('v') || (u.pathname.match(/\/(shorts|embed)\/([\w-]{11})/) || [])[2];
+    if (v) return { id: v };
+    if (list) return { list };
+  }
+  if (/\.(mp3|ogg|wav|m4a|opus|flac|aac)(\?|$)/i.test(u.pathname + u.search)) return { audio: input };
+  return null;
+}
+
+function renderResults() {
+  const box = $('results'); box.innerHTML = '';
+  queue.forEach((it, i) => {
+    const d = document.createElement('div'); d.className = 'res' + (i === qi ? ' on' : '');
+    const im = document.createElement('img'); im.src = it.thumb; im.alt = ''; im.loading = 'lazy';
+    const t = document.createElement('div');
+    const b = document.createElement('b'); b.textContent = it.title;
+    const s = document.createElement('span'); s.textContent = it.channel;
+    t.append(b, s); d.append(im, t);
+    d.onclick = () => playAt(i);
+    box.appendChild(d);
+  });
+  $('ctrl').hidden = queue.length < 2;
+}
+
+function playAt(i) {
+  if (!queue.length) return;
+  qi = (i + queue.length) % queue.length;
+  playYT(queue[qi].id, queue[qi].title);
+  renderResults();
+}
+function step(d) { if (queue.length) playAt(qi + d); }
+$('prev').onclick = () => step(-1);
+$('next').onclick = () => step(1);
+
+async function search(text) {
+  const key = $('key').value.trim();
+  if (!key) { $('cfg').open = true; setMsg('Para buscar por nombre pegá tu API key en Ajustes. Con un link no hace falta.', true); return; }
+  setMsg('Buscando…');
+  try {
+    const p = new URLSearchParams({ part: 'snippet', type: 'video', maxResults: '15', q: text, key });
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?' + p);
+    const j = await r.json();
+    if (j.error) { setMsg('Error de YouTube: ' + j.error.message, true); return; }
+    queue = (j.items || []).map(x => ({
+      id: x.id.videoId,
+      title: x.snippet.title.replace(/&amp;|&#39;|&quot;/g, m => ({'&amp;':'&','&#39;':"'",'&quot;':'"'}[m])),
+      channel: x.snippet.channelTitle,
+      thumb: x.snippet.thumbnails.medium ? x.snippet.thumbnails.medium.url : ''
+    }));
+    setMsg(queue.length ? '' : 'Sin resultados.');
+    qi = -1; renderResults();
+    if (queue.length) playAt(0);
+  } catch (e) { setMsg('Error: ' + e.message, true); }
+}
+
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const v = $('q').value.trim(); if (!v) return;
+  setMsg('');
+  const p = parse(v);
+  if (p && p.id) { queue = []; qi = -1; renderResults(); playYT(p.id, ''); }
+  else if (p && p.list) { queue = []; renderResults(); playList(p.list); }
+  else if (p && p.audio) { queue = []; renderResults(); playAudio(p.audio); }
+  else if (/^https?:\/\//i.test(v)) setMsg('No reconozco ese link. Probá con YouTube o un archivo de audio directo (mp3, ogg…).', true);
+  else search(v);
+};
+</script>
+</body>
+</html>

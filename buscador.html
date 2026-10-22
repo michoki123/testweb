@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Buscador</title>
+<style>
+:root{
+  --bg:#0e1015;--surface:#171a22;--surface2:#1f2330;--border:#2a2f3e;
+  --text:#e8eaf0;--muted:#8b92a6;--accent:#7c9cff;--accent-text:#0b1020;--danger:#ff8a7a;
+  --radius:14px;
+}
+@media (prefers-color-scheme: light){
+  :root{--bg:#f4f5f9;--surface:#fff;--surface2:#eceef5;--border:#dcdfea;
+  --text:#1a1d29;--muted:#667;--accent:#4a68e0;--accent-text:#fff;--danger:#c0392b}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  padding-bottom:env(safe-area-inset-bottom,0px)}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 85%,transparent);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
+  padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px}
+.bar{display:flex;gap:8px;max-width:1200px;margin:0 auto}
+.search{flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);
+  border:1px solid var(--border);border-radius:999px;padding:0 14px}
+.search:focus-within{border-color:var(--accent)}
+.search input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);font:inherit;padding:11px 0}
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{border:0;border-radius:999px;padding:0 18px;background:var(--accent);color:var(--accent-text);font-weight:600}
+.icon{width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--surface);
+  display:grid;place-items:center;font-size:18px}
+.icon:hover{background:var(--surface2)}
+#settings{max-width:1200px;margin:10px auto 0;display:none;gap:8px;flex-wrap:wrap}
+#settings.open{display:flex}
+#settings input{flex:1 1 160px;background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;color:var(--text);font:inherit;outline:0}
+#settings input:focus{border-color:var(--accent)}
+#settings small{flex-basis:100%;color:var(--muted)}
+main{max-width:1200px;margin:0 auto;padding:14px}
+#status{color:var(--muted);min-height:22px;margin-bottom:10px}
+#status.err{color:var(--danger)}
+#grid{columns:2;column-gap:10px}
+@media(min-width:600px){#grid{columns:3}}
+@media(min-width:900px){#grid{columns:4}}
+@media(min-width:1150px){#grid{columns:5}}
+.card{break-inside:avoid;margin:0 0 10px;border-radius:var(--radius);overflow:hidden;position:relative;
+  background:var(--surface2);cursor:pointer;border:1px solid var(--border);transition:transform .15s}
+.card:hover{transform:translateY(-2px)}
+.card img{display:block;width:100%;height:auto}
+.badge{position:absolute;top:8px;left:8px;background:#000a;color:#fff;font-size:11px;
+  padding:2px 8px;border-radius:999px}
+.skel{height:180px;border-radius:var(--radius);margin:0 0 10px;break-inside:avoid;
+  background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);
+  background-size:200% 100%;animation:sh 1.2s infinite}
+.skel:nth-child(3n){height:240px}.skel:nth-child(3n+1){height:150px}
+@keyframes sh{to{background-position:-200% 0}}
+.pager{display:flex;justify-content:center;align-items:center;gap:14px;padding:18px 0}
+.pager button{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:9px 18px}
+.pager button:disabled{opacity:.4;cursor:default}
+.pager span{color:var(--muted)}
+#lb{position:fixed;inset:0;z-index:20;background:#000e;display:none;flex-direction:column}
+#lb.open{display:flex}
+#lb .top{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px}
+#lb .top a,#lb .top button{color:#fff;background:#fff2;border:0;border-radius:999px;
+  padding:8px 16px;text-decoration:none;font-size:14px}
+#stage{flex:1;min-height:0;display:grid;place-items:center;position:relative}
+#stage img,#stage video{max-width:100%;max-height:100%;object-fit:contain}
+.nav{position:absolute;top:50%;transform:translateY(-50%);background:#fff2;border:0;color:#fff;
+  width:44px;height:44px;border-radius:50%;font-size:20px}
+.nav.l{left:10px}.nav.r{right:10px}
+#tagsbox{max-height:28vh;overflow:auto;padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#fff2;color:#fff;border:0;border-radius:999px;padding:4px 11px;font-size:12px}
+.chip:hover{background:var(--accent);color:var(--accent-text)}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar"><a class="icon" href="index.html" title="Inicio" style="text-decoration:none;color:inherit">🏠</a>
+    <form class="search" id="form">
+      <span aria-hidden="true">🔍</span>
+      <input id="tags" placeholder="Tags separados por espacio…" autocomplete="off" enterkeyhint="search">
+      <button class="btn" style="margin:5px -8px 5px 0;padding:6px 16px">Buscar</button>
+    </form>
+    <button class="icon" id="gear" title="Credenciales" aria-label="Credenciales">⚙️</button>
+  </div>
+  <div id="settings">
+    <input id="uid" placeholder="user_id" inputmode="numeric" autocomplete="off">
+    <input id="key" placeholder="api_key" type="password" autocomplete="off">
+    <small>Se guardan solo en este navegador. Las sacás de tu cuenta → Opciones.</small>
+  </div>
+</header>
+
+<main>
+  <div id="status">Ingresá tus credenciales y buscá algo.</div>
+  <div id="grid"></div>
+  <div class="pager" id="pager" hidden>
+    <button id="prev">← Anterior</button>
+    <span id="pn"></span>
+    <button id="next">Siguiente →</button>
+  </div>
+</main>
+
+<div id="lb">
+  <div class="top">
+    <button id="close">✕ Cerrar</button>
+    <a id="orig" target="_blank" rel="noopener noreferrer">Abrir original ↗</a>
+  </div>
+  <div id="stage">
+    <button class="nav l" id="lprev" aria-label="Anterior">‹</button>
+    <div id="media"></div>
+    <button class="nav r" id="lnext" aria-label="Siguiente">›</button>
+  </div>
+  <div id="tagsbox"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let page = 0, posts = [], idx = 0;
+
+try {
+  $('uid').value = localStorage.getItem('uid') || '';
+  $('key').value = localStorage.getItem('key') || '';
+  $('tags').value = localStorage.getItem('tags') || '';
+} catch(e) {}
+if (!$('uid').value || !$('key').value) $('settings').classList.add('open');
+
+$('gear').onclick = () => $('settings').classList.toggle('open');
+
+const isVideo = u => /\.(mp4|webm)(\?|$)/i.test(u || '');
+
+function setStatus(t, err) {
+  $('status').textContent = t;
+  $('status').className = err ? 'err' : '';
+}
+
+function skeletons() {
+  $('grid').innerHTML = Array.from({length: 12}, () => '<div class="skel"></div>').join('');
+}
+
+async function search() {
+  const uid = $('uid').value.trim(), key = $('key').value.trim();
+  if (!uid || !key) { $('settings').classList.add('open'); setStatus('Falta user_id o api_key.', true); return; }
+  try {
+    localStorage.setItem('uid', uid);
+    localStorage.setItem('key', key);
+    localStorage.setItem('tags', $('tags').value);
+  } catch(e) {}
+
+  const params = new URLSearchParams({
+    page:'dapi', s:'post', q:'index', json:'1', limit:'40', pid:page,
+    tags:$('tags').value.trim(), user_id:uid, api_key:key
+  });
+  setStatus('Cargando…'); skeletons(); $('pager').hidden = true;
+  try {
+    const r = await fetch('https://api.rule34.xxx/index.php?' + params);
+    const txt = await r.text();
+    if (!txt.trim()) { posts = []; render(); setStatus('Sin resultados.'); return; }
+    let data;
+    try { data = JSON.parse(txt); }
+    catch(e) { $('grid').innerHTML = ''; setStatus('Respuesta inesperada: ' + txt.slice(0, 160), true); return; }
+    posts = Array.isArray(data) ? data : [];
+    render();
+    setStatus(posts.length ? '' : 'Sin resultados.');
+  } catch (e) {
+    $('grid').innerHTML = '';
+    setStatus('Error: ' + e.message + '. Si es CORS, abrí la página desde un servidor local.', true);
+  }
+}
+
+function render() {
+  const g = $('grid'); g.innerHTML = '';
+  posts.forEach((p, i) => {
+    const c = document.createElement('div'); c.className = 'card';
+    const im = document.createElement('img');
+    im.loading = 'lazy'; im.alt = '';
+    im.src = p.preview_url || p.sample_url || p.file_url;
+    c.appendChild(im);
+    if (isVideo(p.file_url)) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = '▶ video'; c.appendChild(b); }
+    c.onclick = () => openLb(i);
+    g.appendChild(c);
+  });
+  $('pager').hidden = !posts.length && page === 0;
+  $('pn').textContent = 'Página ' + (page + 1);
+  $('prev').disabled = page === 0;
+  $('next').disabled = posts.length < 40;
+  window.scrollTo({top: 0});
+}
+
+function openLb(i) {
+  idx = (i + posts.length) % posts.length;
+  const p = posts[idx];
+  const m = $('media'); m.innerHTML = '';
+  if (isVideo(p.file_url)) {
+    const v = document.createElement('video');
+    v.src = p.file_url; v.controls = true; v.autoplay = true; v.loop = true; v.playsInline = true;
+    m.appendChild(v);
+  } else {
+    const im = document.createElement('img');
+    im.src = p.sample_url || p.file_url;
+    m.appendChild(im);
+  }
+  $('orig').href = p.file_url;
+  const tb = $('tagsbox'); tb.innerHTML = '';
+  (p.tags || '').split(' ').filter(Boolean).slice(0, 40).forEach(t => {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = t;
+    b.onclick = () => {
+      const cur = $('tags').value.trim().split(/\s+/).filter(Boolean);
+      if (!cur.includes(t)) cur.push(t);
+      $('tags').value = cur.join(' ');
+      closeLb(); page = 0; search();
+    };
+    tb.appendChild(b);
+  });
+  $('lb').classList.add('open');
+}
+function closeLb() { $('lb').classList.remove('open'); $('media').innerHTML = ''; }
+
+$('form').onsubmit = e => { e.preventDefault(); page = 0; search(); };
+$('next').onclick = () => { page++; search(); };
+$('prev').onclick = () => { if (page > 0) { page--; search(); } };
+$('close').onclick = closeLb;
+$('lprev').onclick = () => openLb(idx - 1);
+$('lnext').onclick = () => openLb(idx + 1);
+document.addEventListener('keydown', e => {
+  if (!$('lb').classList.contains('open')) return;
+  if (e.key === 'Escape') closeLb();
+  if (e.key === 'ArrowLeft') openLb(idx - 1);
+  if (e.key === 'ArrowRight') openLb(idx + 1);
+});
+let sx = null;
+$('stage').addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, {passive:true});
+$('stage').addEventListener('touchend', e => {
+  if (sx === null) return;
+  const dx = e.changedTouches[0].clientX - sx; sx = null;
+  if (Math.abs(dx) > 60) openLb(idx + (dx < 0 ? 1 : -1));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Descargas</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .meta{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="top"><a class="home" href="index.html" title="Inicio">🏠</a><h1>Descargas</h1></div>
+<main>
+  <div class="grid" id="list"></div>
+</main>
+<script>
+/* EDITÁ ESTA LISTA: una entrada por programa.
+   url puede ser un link a GitHub Releases, Mediafire, un archivo de esta misma carpeta, etc. */
+const PROGRAMAS = [
+  { nombre: "Mi programa 1", desc: "Descripción corta de qué hace.", version: "v1.0", plataforma: "Windows", url: "#" },
+  { nombre: "Mi programa 2", desc: "Otra cosita que hice.", version: "v0.3", plataforma: "Android", url: "#" },
+];
+
+const list = document.getElementById('list');
+for (const p of PROGRAMAS) {
+  const c = document.createElement('div'); c.className = 'card';
+  const h = document.createElement('h3'); h.textContent = p.nombre;
+  const d = document.createElement('p'); d.textContent = p.desc;
+  const row = document.createElement('div'); row.className = 'row';
+  const meta = document.createElement('div'); meta.className = 'meta';
+  for (const t of [p.version, p.plataforma]) {
+    if (!t) continue;
+    const s = document.createElement('span'); s.className = 'tag'; s.textContent = t; meta.appendChild(s);
+  }
+  const a = document.createElement('a'); a.className = 'btn'; a.href = p.url; a.textContent = 'Descargar';
+  a.rel = 'noopener noreferrer';
+  row.append(meta, a);
+  c.append(h, d, row);
+  list.appendChild(c);
+}
+</script>
+</body>
+</html>
