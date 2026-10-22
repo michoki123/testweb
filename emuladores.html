@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Emuladores</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .panel{margin-bottom:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  select{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;color:var(--text)}
+  #gamewrap{display:none}
+  #game{width:100%;aspect-ratio:4/3;max-height:80vh;background:#000;border-radius:var(--radius);overflow:hidden}
+  #st{min-height:22px;color:var(--danger);margin:8px 0}
+  .note{font-size:14px}
+</style>
+</head>
+<body>
+<div class="top"><a class="home" href="index.html" title="Inicio">🏠</a><h1>Emuladores</h1></div>
+<main>
+  <div id="setup">
+    <p class="muted note">Emuladores de consolas retro en el navegador, con EmulatorJS. Esta página no incluye ningún juego: cargás tu propio archivo (ROM), que se queda en tu equipo.</p>
+    <div class="panel">
+      <div class="row">
+        <select id="sys">
+          <optgroup label="Nintendo">
+            <option value="nes" selected>NES / Famicom</option>
+            <option value="snes">Super Nintendo</option>
+            <option value="gb">Game Boy / Game Boy Color</option>
+            <option value="gba">Game Boy Advance</option>
+            <option value="n64">Nintendo 64 (pesado)</option>
+            <option value="nds">Nintendo DS (pesado)</option>
+          </optgroup>
+          <optgroup label="Sega">
+            <option value="segaMD">Mega Drive / Genesis</option>
+            <option value="segaMS">Master System</option>
+            <option value="segaGG">Game Gear</option>
+          </optgroup>
+          <optgroup label="Otros">
+            <option value="atari2600">Atari 2600</option>
+            <option value="pce">PC Engine / TurboGrafx-16</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="row"><input type="file" id="rom"></div>
+      <button class="btn" id="start">▶ Jugar</button>
+      <div id="st"></div>
+    </div>
+    <p class="muted note">Acepta el archivo suelto o comprimido en .zip. Los controles de teclado y los de pantalla táctil se configuran desde el menú del propio emulador, que también tiene guardado rápido de partida. Usá solo juegos que tengas derecho a usar.</p>
+  </div>
+
+  <div id="gamewrap">
+    <div id="game"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn ghost" id="again">↩ Cambiar juego</button>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const PATH = 'https://cdn.emulatorjs.org/stable/data/';
+
+$('start').onclick = () => {
+  const file = $('rom').files[0];
+  if (!file) { $('st').textContent = 'Elegí un archivo de juego primero.'; return; }
+  $('st').textContent = '';
+  $('setup').style.display = 'none';
+  $('gamewrap').style.display = 'block';
+
+  window.EJS_player = '#game';
+  window.EJS_core = $('sys').value;
+  window.EJS_gameName = file.name.replace(/\.[^.]+$/, '');
+  window.EJS_gameUrl = URL.createObjectURL(file);
+  window.EJS_pathtodata = PATH;
+  window.EJS_startOnLoaded = true;
+  window.EJS_color = '#7c9cff';
+  window.EJS_language = 'es-ES';
+
+  const s = document.createElement('script');
+  s.src = PATH + 'loader.js';
+  s.onerror = () => {
+    $('gamewrap').style.display = 'none'; $('setup').style.display = 'block';
+    $('st').textContent = 'No se pudo cargar el emulador (¿sin internet?).';
+  };
+  document.body.appendChild(s);
+};
+
+// EmulatorJS no se puede reiniciar limpio en la misma página: se recarga.
+$('again').onclick = () => location.reload();
+</script>
+</body>
+</html>

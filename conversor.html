@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conversor de audio y video</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .panel{margin-bottom:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .row label{color:var(--muted);font-size:14px}
+  select,.num{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;color:var(--text)}
+  .num{width:90px}
+  progress{width:100%;height:10px;accent-color:var(--accent)}
+  #st{min-height:22px;color:var(--muted);margin:10px 0}
+  #st.err{color:var(--danger)}
+  .out{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .out .item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+  .out video,.out audio,.out img{width:100%;max-height:300px;margin:8px 0;border-radius:10px}
+  #log{white-space:pre-wrap;font:12px/1.4 monospace;max-height:200px;overflow:auto;color:var(--muted)}
+  .note{font-size:14px}
+</style>
+</head>
+<body>
+<div class="top"><a class="home" href="index.html" title="Inicio">🏠</a><h1>Conversor</h1></div>
+<main>
+  <p class="muted note">Convertí audio y video con ffmpeg corriendo en tu navegador. Los archivos no se suben a ningún servidor.</p>
+
+  <div class="panel">
+    <div class="row"><input type="file" id="file" accept="audio/*,video/*"></div>
+    <div class="row">
+      <label for="fmt">Convertir a</label>
+      <select id="fmt">
+        <optgroup label="Audio">
+          <option value="mp3">MP3</option>
+          <option value="ogg">OGG (Vorbis)</option>
+          <option value="wav">WAV</option>
+        </optgroup>
+        <optgroup label="Video">
+          <option value="mp4">MP4 (H.264)</option>
+          <option value="webm">WebM</option>
+          <option value="gif">GIF animado</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="row">
+      <label>Recortar (opcional):</label>
+      <label>desde <input class="num" id="ss" placeholder="0:00" inputmode="decimal"></label>
+      <label>duración <input class="num" id="tt" placeholder="seg" inputmode="decimal"></label>
+    </div>
+    <button class="btn" id="go">Convertir</button>
+  </div>
+
+  <progress id="bar" value="0" max="1" hidden></progress>
+  <div id="st"></div>
+  <div class="out" id="out"></div>
+
+  <details style="margin-top:18px">
+    <summary class="muted">Registro de ffmpeg</summary>
+    <div id="log" class="panel" style="margin-top:8px"></div>
+  </details>
+  <p class="muted note">La primera vez descarga el motor (unos 30 MB) y después queda en caché. Funciona bien con archivos de hasta unos cientos de MB; con videos muy pesados el navegador puede quedarse sin memoria.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const FF = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+const CORE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+
+const FORMATOS = {
+  mp3:  { ext: 'mp3',  mime: 'audio/mpeg', kind: 'audio', args: ['-vn', '-c:a', 'libmp3lame', '-q:a', '2'] },
+  ogg:  { ext: 'ogg',  mime: 'audio/ogg',  kind: 'audio', args: ['-vn', '-c:a', 'libvorbis', '-q:a', '5'] },
+  wav:  { ext: 'wav',  mime: 'audio/wav',  kind: 'audio', args: ['-vn', '-c:a', 'pcm_s16le'] },
+  mp4:  { ext: 'mp4',  mime: 'video/mp4',  kind: 'video', args: ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'] },
+  webm: { ext: 'webm', mime: 'video/webm', kind: 'video', args: ['-c:v', 'libvpx', '-b:v', '1M', '-crf', '10', '-c:a', 'libvorbis'] },
+  gif:  { ext: 'gif',  mime: 'image/gif',  kind: 'image', args: ['-an', '-vf', 'fps=12,scale=480:-1:flags=lanczos', '-loop', '0'] }
+};
+
+let ffmpeg = null, loaded = false, busy = false;
+
+function setStatus(t, err) { $('st').textContent = t; $('st').className = err ? 'err' : ''; }
+
+async function ensureLoaded() {
+  if (loaded) return;
+  if (!window.FFmpegWASM || !window.FFmpegUtil) throw new Error('No cargaron las librerías (¿sin internet?).');
+  const { FFmpeg } = FFmpegWASM;
+  const { toBlobURL } = FFmpegUtil;
+  ffmpeg = new FFmpeg();
+  ffmpeg.on('log', ({ message }) => { const l = $('log'); l.textContent += message + '\n'; l.scrollTop = l.scrollHeight; });
+  ffmpeg.on('progress', ({ progress }) => { $('bar').value = Math.max(0, Math.min(1, progress)); });
+  setStatus('Descargando el motor de ffmpeg (la primera vez tarda)…');
+  await ffmpeg.load({
+    classWorkerURL: await toBlobURL(FF + '/814.ffmpeg.js', 'text/javascript'),
+    coreURL: await toBlobURL(CORE + '/ffmpeg-core.js', 'text/javascript'),
+    wasmURL: await toBlobURL(CORE + '/ffmpeg-core.wasm', 'application/wasm')
+  });
+  loaded = true;
+}
+
+function fmtSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
+
+$('go').onclick = async () => {
+  if (busy) return;
+  const f = $('file').files[0];
+  if (!f) { setStatus('Elegí un archivo primero.', true); return; }
+  busy = true; $('go').disabled = true;
+  $('bar').hidden = false; $('bar').value = 0; $('log').textContent = '';
+  const fm = FORMATOS[$('fmt').value];
+  const inName = 'input' + ((f.name.match(/\.[a-z0-9]+$/i) || [''])[0]);
+  const outName = 'output.' + fm.ext;
+  try {
+    await ensureLoaded();
+    setStatus('Convirtiendo…');
+    await ffmpeg.writeFile(inName, await FFmpegUtil.fetchFile(f));
+    const ss = $('ss').value.trim(), tt = $('tt').value.trim();
+    const pre = ss ? ['-ss', ss] : [];
+    const post = tt ? ['-t', tt] : [];
+    const code = await ffmpeg.exec([...pre, '-i', inName, ...fm.args, ...post, outName]);
+    if (code !== 0) throw new Error('ffmpeg terminó con error (mirá el registro).');
+    const data = await ffmpeg.readFile(outName);
+    const blob = new Blob([data.buffer], { type: fm.mime });
+    const url = URL.createObjectURL(blob);
+    const base = f.name.replace(/\.[^.]+$/, '');
+
+    const item = document.createElement('div'); item.className = 'item';
+    const t = document.createElement('div'); t.textContent = base + '.' + fm.ext + ' · ' + fmtSize(blob.size);
+    item.appendChild(t);
+    const prev = document.createElement(fm.kind === 'image' ? 'img' : fm.kind);
+    prev.src = url; if (fm.kind !== 'image') prev.controls = true;
+    item.appendChild(prev);
+    const a = document.createElement('a'); a.className = 'btn'; a.href = url; a.download = base + '.' + fm.ext; a.textContent = 'Descargar';
+    item.appendChild(a);
+    $('out').prepend(item);
+
+    setStatus('Listo.');
+    try { await ffmpeg.deleteFile(inName); await ffmpeg.deleteFile(outName); } catch (e) {}
+  } catch (e) {
+    setStatus('Error: ' + e.message, true);
+  } finally {
+    busy = false; $('go').disabled = false; $('bar').hidden = true;
+  }
+};
+</script>
+</body>
+</html>

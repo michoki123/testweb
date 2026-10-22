@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Máquina virtual</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .step{margin-bottom:12px}
+  .step h3{margin:0 0 8px;font-size:15px}
+  .opts{display:flex;flex-direction:column;gap:8px}
+  .opt{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  select{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;color:var(--text)}
+  input[type=file]{max-width:100%}
+  #runner{display:none}
+  #runner.on{display:block}
+  #setup.off{display:none}
+  #screenbox{background:#000;border-radius:var(--radius);overflow:auto;text-align:center;min-height:200px;margin-bottom:12px}
+  #screen{display:inline-block;background:#000}
+  #screen div{white-space:pre;font:14px monospace;line-height:14px;color:#ddd;text-align:left}
+  #screen canvas{display:block}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .bar button,.bar label{font-size:14px;padding:8px 14px}
+  #st{color:var(--muted);margin-bottom:10px;min-height:22px}
+  #st.err{color:var(--danger)}
+  .tips li{margin-bottom:4px}
+  .note{font-size:14px}
+</style>
+</head>
+<body>
+<div class="top"><a class="home" href="index.html" title="Inicio">🏠</a><h1>Máquina virtual (x86)</h1></div>
+<main>
+
+<div id="setup">
+  <p class="muted note">Una PC emulada dentro de tu navegador, con WebAssembly. Esta página no trae ningún sistema operativo: cargás tu propia ISO y se queda en tu equipo, no se sube a ningún lado.</p>
+
+  <div class="panel step">
+    <h3>1. Imagen de arranque (ISO)</h3>
+    <input type="file" id="iso" accept=".iso,.img,.bin">
+  </div>
+
+  <div class="panel step">
+    <h3>2. Disco duro</h3>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="disk" value="none" checked> Sin disco (modo live, para Linux y similares)</label>
+      <label class="opt"><input type="radio" name="disk" value="blank"> Disco vacío en memoria
+        <select id="blanksize">
+          <option value="256">256 MB</option>
+          <option value="512">512 MB</option>
+          <option value="1024" selected>1 GB</option>
+          <option value="2048">2 GB</option>
+        </select>
+        <span class="muted note">(se borra al cerrar la pestaña)</span>
+      </label>
+      <label class="opt"><input type="radio" name="disk" value="file"> Mi propia imagen de disco
+        <input type="file" id="hda" accept=".img,.vhd,.bin,.raw">
+      </label>
+    </div>
+  </div>
+
+  <div class="panel step">
+    <h3>3. Memoria RAM</h3>
+    <select id="ram">
+      <option value="64">64 MB</option>
+      <option value="128">128 MB</option>
+      <option value="256" selected>256 MB</option>
+      <option value="512">512 MB</option>
+      <option value="1024">1 GB</option>
+    </select>
+  </div>
+
+  <button class="btn" id="start">▶ Encender</button>
+  <div id="st"></div>
+
+  <details style="margin-top:18px">
+    <summary class="muted">Qué sistemas andan bien</summary>
+    <ul class="tips muted note">
+      <li><b>Muy bien:</b> Linux livianos (Tiny Core, Alpine, Damn Small Linux), KolibriOS, FreeDOS.</li>
+      <li><b>Bien:</b> Windows 95/98 y sistemas de esa época.</li>
+      <li><b>Lento:</b> Windows 2000 y XP. Pueden arrancar, pero tardan varios minutos y andan con pocos cuadros por segundo. Para instalar uno necesitás un disco vacío y bastante paciencia.</li>
+      <li>Conviene usar una PC y un navegador actualizado. En celular anda mucho peor.</li>
+      <li>Usá solo ISOs de sistemas que tengas derecho a usar, como las de Linux o las de tus propias licencias.</li>
+    </ul>
+  </details>
+</div>
+
+<div id="runner">
+  <div id="st2" class="muted" style="margin-bottom:10px"></div>
+  <div id="screenbox">
+    <div id="screen"><div></div><canvas></canvas></div>
+  </div>
+  <div class="bar">
+    <button class="btn ghost" id="pause">⏸ Pausar</button>
+    <button class="btn ghost" id="reset">↻ Reiniciar</button>
+    <button class="btn ghost" id="cad">Ctrl+Alt+Supr</button>
+    <button class="btn ghost" id="mouse">🖱 Capturar mouse</button>
+    <button class="btn ghost" id="full">⛶ Pantalla completa</button>
+    <button class="btn ghost" id="savest">💾 Guardar estado</button>
+    <label class="btn ghost" style="cursor:pointer">📂 Cargar estado<input type="file" id="loadst" hidden></label>
+    <button class="btn" id="off">⏹ Apagar</button>
+  </div>
+  <p class="muted note">Hacé clic dentro de la pantalla para escribir. Para soltar el mouse capturado, apretá Esc.</p>
+</div>
+
+</main>
+
+<script src="v86/libv86.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let emu = null;
+let cfg = null;
+
+function setStatus(t, err) { const s = $('st'); s.textContent = t; s.className = err ? 'err' : ''; }
+
+function buildConfig() {
+  const iso = $('iso').files[0];
+  const disk = document.querySelector('input[name=disk]:checked').value;
+  const hdaFile = $('hda').files[0];
+  if (!iso && disk !== 'file') { setStatus('Elegí una ISO para arrancar.', true); return null; }
+  if (disk === 'file' && !hdaFile) { setStatus('Elegí el archivo de imagen de disco.', true); return null; }
+
+  const c = {
+    wasm_path: 'v86/v86.wasm',
+    memory_size: parseInt($('ram').value, 10) * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    screen_container: $('screen'),
+    bios: { url: 'v86/seabios.bin' },
+    vga_bios: { url: 'v86/vgabios.bin' },
+    autostart: true
+  };
+  if (iso) c.cdrom = { buffer: iso };
+  if (disk === 'file') c.hda = { buffer: hdaFile };
+  if (disk === 'blank') {
+    try { c.hda = { buffer: new ArrayBuffer(parseInt($('blanksize').value, 10) * 1024 * 1024) }; }
+    catch (e) { setStatus('No hay memoria para un disco de ese tamaño. Probá uno más chico.', true); return null; }
+  }
+  return c;
+}
+
+function boot() {
+  cfg = buildConfig(); if (!cfg) return;
+  setStatus('');
+  $('setup').classList.add('off');
+  $('runner').classList.add('on');
+  $('st2').textContent = 'Encendiendo…';
+  $('pause').textContent = '⏸ Pausar';
+  try {
+    emu = new V86(cfg);
+    emu.add_listener('emulator-ready', () => { $('st2').textContent = 'En marcha.'; });
+    emu.add_listener('download-error', () => { $('st2').textContent = 'No se pudo cargar un archivo del emulador. Abrí la página desde un servidor (no con doble clic).'; });
+  } catch (e) {
+    shutdown();
+    setStatus('Error al iniciar: ' + e.message, true);
+  }
+}
+
+function shutdown() {
+  try { if (emu) emu.destroy(); } catch (e) {}
+  emu = null;
+  const sc = $('screen');
+  sc.innerHTML = '<div></div><canvas></canvas>';
+  $('runner').classList.remove('on');
+  $('setup').classList.remove('off');
+}
+
+$('start').onclick = boot;
+$('off').onclick = shutdown;
+$('pause').onclick = () => {
+  if (!emu) return;
+  if (emu.is_running()) { emu.stop(); $('pause').textContent = '▶ Reanudar'; $('st2').textContent = 'En pausa.'; }
+  else { emu.run(); $('pause').textContent = '⏸ Pausar'; $('st2').textContent = 'En marcha.'; }
+};
+$('reset').onclick = () => { if (emu) emu.restart(); };
+$('cad').onclick = () => { if (emu) emu.keyboard_send_scancodes([0x1D, 0x38, 0xE0, 0x53, 0x9D, 0xB8, 0xE0, 0xD3]); };
+$('mouse').onclick = () => { if (emu) emu.lock_mouse(); };
+$('full').onclick = () => { if (emu) emu.screen_go_fullscreen(); };
+
+$('savest').onclick = async () => {
+  if (!emu) return;
+  try {
+    const s = await emu.save_state();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([s]));
+    a.download = 'estado-vm.bin';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { $('st2').textContent = 'No se pudo guardar el estado: ' + e.message; }
+};
+$('loadst').onchange = async e => {
+  const f = e.target.files[0]; if (!f || !emu) return;
+  try { await emu.restore_state(await f.arrayBuffer()); $('st2').textContent = 'Estado cargado.'; }
+  catch (err) { $('st2').textContent = 'No se pudo cargar ese estado (tiene que ser de la misma configuración): ' + err.message; }
+  e.target.value = '';
+};
+</script>
+</body>
+</html>
